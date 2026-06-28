@@ -77,9 +77,21 @@ export type LearningPoint = {
   clear_example?: string | null;
 };
 
+export type MeaningStructure = {
+  speaker: string;
+  recipient: string;
+  action: string;
+  time: string;
+  place: string;
+  object: string;
+  intent: string;
+  politeness_level: "casual" | "polite" | "formal" | "unknown";
+};
+
 export type RewriteResult = {
   rewritten_text: string;
   meaning_guess?: string;
+  meaning_structure?: MeaningStructure;
   confidence_score: number;
   ambiguity_level?: "low" | "medium" | "high";
   ambiguities: Ambiguity[];
@@ -98,6 +110,8 @@ export type CoachSession = {
   result_json: RewriteResult | null;
   rewritten_text: string | null;
   confidence_score: number | null;
+  meaning_structure: MeaningStructure | null;
+  sensitive_flags: Record<string, unknown> | null;
   saved: boolean;
   feedback_summary: string | null;
   quality_status: string;

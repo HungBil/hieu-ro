@@ -45,6 +45,16 @@ export type SensitiveDetectionResult = {
 export type RewriteResult = {
   rewritten_text: string;
   meaning_guess?: string;
+  meaning_structure: {
+    speaker: string;
+    recipient: string;
+    action: string;
+    time: string;
+    place: string;
+    object: string;
+    intent: string;
+    politeness_level: "casual" | "polite" | "formal" | "unknown";
+  };
   confidence_score: number;
   ambiguity_level: "low" | "medium" | "high";
   ambiguities: Array<{ phrase: string; why_unclear?: string; question: string }>;
@@ -66,6 +76,7 @@ export const rewriteResultJsonSchema = {
   required: [
     "rewritten_text",
     "meaning_guess",
+    "meaning_structure",
     "confidence_score",
     "ambiguity_level",
     "ambiguities",
@@ -77,6 +88,21 @@ export const rewriteResultJsonSchema = {
   properties: {
     rewritten_text: { type: "string" },
     meaning_guess: { type: "string" },
+    meaning_structure: {
+      type: "object",
+      additionalProperties: false,
+      required: ["speaker", "recipient", "action", "time", "place", "object", "intent", "politeness_level"],
+      properties: {
+        speaker: { type: "string" },
+        recipient: { type: "string" },
+        action: { type: "string" },
+        time: { type: "string" },
+        place: { type: "string" },
+        object: { type: "string" },
+        intent: { type: "string" },
+        politeness_level: { type: "string", enum: ["casual", "polite", "formal", "unknown"] },
+      },
+    },
     confidence_score: { type: "number" },
     ambiguity_level: { type: "string", enum: ["low", "medium", "high"] },
     ambiguities: {
@@ -247,6 +273,19 @@ export function validateRewriteResult(value: unknown): { result?: RewriteResult;
   const result: RewriteResult = {
     rewritten_text: typeof input.rewritten_text === "string" ? input.rewritten_text.trim() : "",
     meaning_guess: typeof input.meaning_guess === "string" ? input.meaning_guess.slice(0, 600) : undefined,
+    meaning_structure: {
+      speaker: typeof input.meaning_structure?.speaker === "string" ? input.meaning_structure.speaker.slice(0, 120) : "chưa rõ",
+      recipient: typeof input.meaning_structure?.recipient === "string" ? input.meaning_structure.recipient.slice(0, 120) : "chưa rõ",
+      action: typeof input.meaning_structure?.action === "string" ? input.meaning_structure.action.slice(0, 160) : "chưa rõ",
+      time: typeof input.meaning_structure?.time === "string" ? input.meaning_structure.time.slice(0, 120) : "chưa rõ",
+      place: typeof input.meaning_structure?.place === "string" ? input.meaning_structure.place.slice(0, 120) : "chưa rõ",
+      object: typeof input.meaning_structure?.object === "string" ? input.meaning_structure.object.slice(0, 160) : "chưa rõ",
+      intent: typeof input.meaning_structure?.intent === "string" ? input.meaning_structure.intent.slice(0, 200) : "chưa rõ",
+      politeness_level:
+        input.meaning_structure?.politeness_level === "casual" || input.meaning_structure?.politeness_level === "polite" || input.meaning_structure?.politeness_level === "formal"
+          ? input.meaning_structure.politeness_level
+          : "unknown",
+    },
     confidence_score: typeof input.confidence_score === "number" ? Number(input.confidence_score.toFixed(3)) : 0,
     ambiguity_level: ambiguityLevel,
     ambiguities,
@@ -310,6 +349,7 @@ Nếu chưa chắc, hãy viết bản dịch thận trọng bằng "Có thể l�
 Không được chỉ trả lời rằng cần thêm bối cảnh nếu vẫn có thể đoán được ý chính.
 Không tự thêm người, sự kiện, cáo buộc, địa điểm hoặc kết luận không có căn cứ. Với nội dung trộm cắp, tiền, tai nạn hoặc bảo vệ, dùng wording thận trọng như "có thể", "nghi", "cần xác nhận" khi input chưa rõ.
 Giải thích ngắn gọn vì sao dịch/sửa như vậy.
+Tách ý chính vào meaning_structure bằng cụm ngắn; dùng "chưa rõ" hoặc politeness_level "unknown" nếu input không đủ dữ kiện.
 Tạo 1-3 bài học nhỏ giúp người học tiến gần tiếng Việt phổ thông hơn, ưu tiên trật tự từ, quan hệ sở hữu, từ gần đúng, thiếu chủ ngữ/vị ngữ và cách nối ý.
 Không tạo nội dung học tiếng Anh, không dịch sang tiếng Anh, không dùng giọng thương hại, không dùng wording phán xét.
 Không hiển thị suy luận nội bộ.
@@ -318,6 +358,16 @@ Trả về JSON hợp lệ, không markdown, không text ngoài JSON.`;
   const user = `Câu gốc:\n${input.inputText}\n\nNgữ cảnh:\n${input.contextType}\n\nGiọng điệu mong muốn:\n${input.tone}${examplesBlock}${retryBlock}\n\nTrả về JSON theo schema:\n{
   "rewritten_text": "string",
   "meaning_guess": "string",
+  "meaning_structure": {
+    "speaker": "string",
+    "recipient": "string",
+    "action": "string",
+    "time": "string",
+    "place": "string",
+    "object": "string",
+    "intent": "string",
+    "politeness_level": "casual|polite|formal|unknown"
+  },
   "confidence_score": 0.0,
   "ambiguity_level": "low|medium|high",
   "ambiguities": [
@@ -347,6 +397,16 @@ export function fallbackRewriteResult(inputText: string): RewriteResult {
   return {
     rewritten_text: `Có thể là: ${inputText.trim()}`,
     meaning_guess: "Hệ thống chưa tạo được bản dịch chắc chắn, nên đang giữ nguyên ý gốc và đánh dấu cần xác nhận.",
+    meaning_structure: {
+      speaker: "chưa rõ",
+      recipient: "chưa rõ",
+      action: inputText.trim().slice(0, 160),
+      time: "chưa rõ",
+      place: "chưa rõ",
+      object: "chưa rõ",
+      intent: "cần xác nhận ý chính",
+      politeness_level: "unknown",
+    },
     confidence_score: 0.2,
     ambiguity_level: "high",
     ambiguities: [

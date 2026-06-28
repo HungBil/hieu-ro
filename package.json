@@ -8,9 +8,11 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint:secrets": "node scripts/check-secrets.mjs",
+    "check:product": "node scripts/check-product-contract.mjs",
     "eval:smoke": "node scripts/eval-smoke.mjs",
     "eval:live": "node scripts/eval-live.mjs",
-    "verify": "npm run lint:secrets && npm audit --audit-level=high && npm run eval:smoke && npm run build"
+    "test": "npm run check:product && npm run eval:smoke",
+    "verify": "npm run lint:secrets && npm audit --audit-level=high && npm test && npm run build"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",

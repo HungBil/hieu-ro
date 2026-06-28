@@ -148,6 +148,7 @@ serve(async (req) => {
         input_text: parsed.inputText,
         context_type: parsed.contextType,
         tone: parsed.tone,
+        sensitive_flags: sensitive,
       })
       .select("id")
       .single();
@@ -286,6 +287,8 @@ serve(async (req) => {
         result_json: result,
         rewritten_text: result.rewritten_text,
         confidence_score: result.confidence_score,
+        meaning_structure: result.meaning_structure,
+        sensitive_flags: sensitive,
       })
       .eq("id", sessionId);
 

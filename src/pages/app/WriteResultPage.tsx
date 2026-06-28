@@ -11,8 +11,34 @@ import { ErrorState } from "../../components/common/ErrorState";
 import { LoadingState } from "../../components/common/LoadingState";
 import { PageHeader } from "../../components/common/PageHeader";
 import { StatusBadge } from "../../components/common/StatusBadge";
-import { getCoachSession, savePhraseFromSession } from "../../services/coachService";
+import { getCoachSession, saveCoachFeedback, savePhraseFromSession } from "../../services/coachService";
 import { generateLessonFromSession } from "../../services/lessonService";
+import type { FeedbackRating, MeaningStructure } from "../../types/app";
+
+const feedbackOptions: Array<{ rating: FeedbackRating; label: string }> = [
+  { rating: "correct", label: "Đúng ý tôi" },
+  { rating: "wrong_meaning", label: "Chưa đúng ý" },
+  { rating: "missing_meaning", label: "Thiếu ý" },
+  { rating: "too_verbose", label: "Quá dài" },
+  { rating: "too_hard", label: "Khó hiểu" },
+];
+
+const meaningLabels: Array<{ key: keyof MeaningStructure; label: string }> = [
+  { key: "speaker", label: "Ai nói" },
+  { key: "recipient", label: "Nói với ai" },
+  { key: "action", label: "Việc chính" },
+  { key: "time", label: "Thời gian" },
+  { key: "place", label: "Nơi chốn" },
+  { key: "object", label: "Đối tượng" },
+  { key: "intent", label: "Mục đích" },
+  { key: "politeness_level", label: "Mức lịch sự" },
+];
+
+function meaningValue(meaning: MeaningStructure, key: keyof MeaningStructure) {
+  if (key !== "politeness_level") return meaning[key] || "Chưa rõ";
+  const labels = { casual: "Thân mật", polite: "Lịch sự", formal: "Trang trọng", unknown: "Chưa rõ" };
+  return labels[meaning.politeness_level] || "Chưa rõ";
+}
 
 export function WriteResultPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -44,12 +70,22 @@ export function WriteResultPage() {
     onError: () => setMessage("Không thể tạo bài học lúc này."),
   });
 
+  const feedbackMutation = useMutation({
+    mutationFn: (rating: FeedbackRating) => saveCoachFeedback({ session_id: sessionId || "", rating }),
+    onSuccess: async () => {
+      setMessage("Đã lưu góp ý.");
+      await queryClient.invalidateQueries({ queryKey: ["coach-session", sessionId] });
+    },
+    onError: () => setMessage("Không thể lưu góp ý lúc này."),
+  });
+
   if (sessionQuery.isLoading) return <LoadingState />;
   if (sessionQuery.isError || !sessionQuery.data) return <ErrorState description="Không mở được kết quả này." />;
 
   const session = sessionQuery.data;
   const result = session.result_json;
   if (!result) return <ErrorState title="Chưa có kết quả." description="Phiên viết lại này chưa có dữ liệu kết quả." />;
+  const meaning = result.meaning_structure || session.meaning_structure;
 
   async function copyResult() {
     await navigator.clipboard.writeText(result?.rewritten_text || "");
@@ -81,6 +117,31 @@ export function WriteResultPage() {
           saving={saveMutation.isPending}
           creatingLesson={lessonMutation.isPending}
         />
+
+        {meaning ? (
+          <section className="rounded-card border border-app-border bg-white p-6 shadow-subtle">
+            <h2 className="text-lg font-semibold text-app-text">Ý chính hệ thống hiểu</h2>
+            <dl className="mt-4 grid gap-3 md:grid-cols-2">
+              {meaningLabels.map(({ key, label }) => (
+                <div key={key} className="rounded-[14px] bg-slate-50 p-3">
+                  <dt className="text-xs font-semibold uppercase tracking-normal text-app-muted">{label}</dt>
+                  <dd className="mt-1 text-sm leading-6 text-app-text">{meaningValue(meaning, key)}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        ) : null}
+
+        <section className="rounded-card border border-app-border bg-white p-6 shadow-subtle">
+          <h2 className="text-lg font-semibold text-app-text">Góp ý kết quả</h2>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {feedbackOptions.map((option) => (
+              <Button key={option.rating} type="button" variant="secondary" onClick={() => feedbackMutation.mutate(option.rating)} disabled={feedbackMutation.isPending}>
+                {option.label}
+              </Button>
+            ))}
+          </div>
+        </section>
 
         {result.should_ask_user ? (
           <section className="rounded-card border border-amber-100 bg-amber-50 p-5">
