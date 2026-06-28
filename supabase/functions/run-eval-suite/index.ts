@@ -72,6 +72,20 @@ function tokenOverlap(actual: string, expected: string | null) {
   return matched / expectedTokens.length;
 }
 
+const rubricKeys = ["meaning_preservation", "clarity", "no_hallucination", "respectful_tone", "ambiguity_handling", "learning_quality", "overall"] as const;
+
+function emptyRubric() {
+  return Object.fromEntries(rubricKeys.map((key) => [key, 0])) as Record<(typeof rubricKeys)[number], number>;
+}
+
+function addRubricScore(total: Record<(typeof rubricKeys)[number], number>, score: Record<(typeof rubricKeys)[number], number>) {
+  for (const key of rubricKeys) total[key] += score[key];
+}
+
+function averageRubric(total: Record<(typeof rubricKeys)[number], number>, count: number) {
+  return Object.fromEntries(rubricKeys.map((key) => [key, Number((total[key] / count).toFixed(2))]));
+}
+
 function classifyError(message: string) {
   if (message.startsWith("Missing OPENAI_API_KEY")) return "missing_openai_api_key";
   if (/quota|billing|insufficient/i.test(message)) return "openai_quota_or_billing";
@@ -107,6 +121,7 @@ serve(async (req) => {
     let corePassed = 0;
     let coreCases = 0;
     let coreScore = 0;
+    const coreRubricTotal = emptyRubric();
 
     for (const evalCase of cases) {
       const completion = await callOpenAIChat({
@@ -138,12 +153,22 @@ serve(async (req) => {
         expectedLearningMet,
       ];
       const overall = expectedRewriteAligned ? Math.max(1, criteria.filter(Boolean).length) : 0;
+      const rubric = {
+        meaning_preservation: expectedRewriteAligned ? 5 : 0,
+        clarity: hasRewrite && parsed.issues.length === 0 ? 5 : 2,
+        no_hallucination: critic.pass && expectedRewriteAligned ? 5 : 2,
+        respectful_tone: respectful && noEnglishLesson ? 5 : 0,
+        ambiguity_handling: expectedAmbiguitiesMet ? 5 : 3,
+        learning_quality: expectedLearningMet && noEnglishLesson ? 5 : noEnglishLesson ? 4 : 0,
+        overall,
+      };
       if (overall >= 4) passed += 1;
       totalScore += overall;
       const core = isCoreEval(evalCase.category);
       if (core) {
         coreCases += 1;
         coreScore += overall;
+        addRubricScore(coreRubricTotal, rubric);
         if (overall >= 4) corePassed += 1;
       }
       details.push({
@@ -155,6 +180,7 @@ serve(async (req) => {
         rewritten_text: parsed.result?.rewritten_text || "",
         ambiguities: parsed.result?.ambiguities || [],
         learning_points: parsed.result?.learning_points || [],
+        rubric,
         checks: {
           hasRewrite,
           respectful,
@@ -173,6 +199,7 @@ serve(async (req) => {
     const average = Number((coreScore / coreCases).toFixed(2));
     const allAverage = Number((totalScore / cases.length).toFixed(2));
     const corePassRate = Number((corePassed / coreCases).toFixed(3));
+    const coreRubric = averageRubric(coreRubricTotal, coreCases);
     const { data: run, error: runError } = await service
       .from("ai_eval_runs")
       .insert({
@@ -182,13 +209,13 @@ serve(async (req) => {
         total_cases: cases.length,
         passed_cases: corePassed,
         average_score: average,
-        details: { core: { total_cases: coreCases, passed_cases: corePassed, average_score: average, pass_rate: corePassRate }, all: { total_cases: cases.length, passed_cases: passed, average_score: allAverage }, cases: details },
+        details: { core: { total_cases: coreCases, passed_cases: corePassed, average_score: average, pass_rate: corePassRate, rubric: coreRubric }, all: { total_cases: cases.length, passed_cases: passed, average_score: allAverage }, cases: details },
       })
       .select("id")
       .single();
 
     if (runError) throw runError;
-    return jsonResponse({ run_id: run.id, total_cases: coreCases, passed_cases: corePassed, average_score: average, pass_rate: corePassRate, details });
+    return jsonResponse({ run_id: run.id, total_cases: coreCases, passed_cases: corePassed, average_score: average, pass_rate: corePassRate, rubric: coreRubric, details });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown";
     if (message === "AUTH_REQUIRED") return friendlyError(401, "Bạn cần đăng nhập.");

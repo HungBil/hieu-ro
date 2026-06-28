@@ -21,6 +21,12 @@ if (!body.total_cases) throw new Error("Eval suite has no active cases");
 if (body.average_score < Number(process.env.EVAL_MIN_AVERAGE || "4")) {
   throw new Error(`Eval average ${body.average_score} is below threshold`);
 }
+const rubric = body.rubric || {};
+for (const key of ["no_hallucination", "respectful_tone"]) {
+  if (Number(rubric[key] || 0) < 4.5) {
+    throw new Error(`Eval ${key} ${rubric[key] ?? "missing"} is below 4.5`);
+  }
+}
 if (body.passed_cases < body.total_cases) {
   const failedCoreCases = Array.isArray(body.details)
     ? body.details.filter((item) => item?.core && Number(item?.overall || 0) < 4)

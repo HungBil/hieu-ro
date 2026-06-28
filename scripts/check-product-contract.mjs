@@ -9,6 +9,9 @@ const checks = [
   ["src/pages/app/WriteResultPage.tsx", "Quá dài"],
   ["src/pages/app/WriteResultPage.tsx", "Khó hiểu"],
   ["src/pages/app/WriteResultPage.tsx", "meaning_structure"],
+  ["supabase/functions/run-eval-suite/index.ts", "no_hallucination"],
+  ["supabase/functions/run-eval-suite/index.ts", "respectful_tone"],
+  ["scripts/eval-live.mjs", "no_hallucination"],
   ["package.json", "\"test\""],
 ];
 
