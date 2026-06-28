@@ -58,7 +58,7 @@ export function WriteResultPage() {
 
   return (
     <div>
-      <PageHeader title="Kết quả viết lại" description="Bạn có thể sao chép, lưu mẫu câu hoặc tạo bài học nhỏ từ kết quả này." />
+      <PageHeader title="Kết quả dịch" description="Bạn có thể sao chép, lưu mẫu câu hoặc tạo bài học thích ứng từ kết quả này." />
       {message ? <p className="mb-5 rounded-[16px] border border-blue-100 bg-primary-soft p-4 text-sm text-primary">{message}</p> : null}
 
       <div className="space-y-6">

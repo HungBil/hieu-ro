@@ -12,3 +12,4 @@ tailwind.config.d.ts
 supabase/.temp
 .wrangler
 .playwright-mcp
+.vite-*.log

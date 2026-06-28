@@ -11,6 +11,16 @@ export const registerSchema = z.object({
   displayName: z.string().max(80, "Tên hiển thị quá dài.").optional(),
 });
 
+export const updatePasswordSchema = z
+  .object({
+    password: z.string().min(8, "Mật khẩu cần ít nhất 8 ký tự."),
+    confirmPassword: z.string().min(1, "Vui lòng nhập lại mật khẩu."),
+  })
+  .refine((value) => value.password === value.confirmPassword, {
+    message: "Mật khẩu nhập lại không khớp.",
+    path: ["confirmPassword"],
+  });
+
 export const rewriteSchema = z.object({
   input_text: z
     .string()

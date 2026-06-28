@@ -1,18 +1,16 @@
 import { NavLink } from "react-router-dom";
-import { BookOpen, MessageSquare, PenLine, Settings, UsersRound } from "lucide-react";
+import { BookOpen, PenLine, Settings } from "lucide-react";
 import { cn } from "../lib/utils";
 
 const items = [
-  { to: "/app/write", label: "Viết", icon: PenLine },
+  { to: "/app/write", label: "Dịch", icon: PenLine },
   { to: "/app/lessons", label: "Học", icon: BookOpen },
-  { to: "/app/samples", label: "Mẫu", icon: MessageSquare },
-  { to: "/app/community", label: "Cộng đồng", icon: UsersRound },
   { to: "/app/settings", label: "Tài khoản", icon: Settings },
 ];
 
 export function MobileNav() {
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-app-border bg-white px-2 py-2 lg:hidden">
+    <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-3 border-t border-white/70 bg-white/[0.88] px-2 py-2 shadow-[0_-12px_36px_rgba(16,32,30,0.08)] backdrop-blur-xl lg:hidden">
       {items.map((item) => (
         <NavLink
           key={item.to}

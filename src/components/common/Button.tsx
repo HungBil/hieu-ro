@@ -4,8 +4,8 @@ import { cn } from "../../lib/utils";
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 
 const variants: Record<ButtonVariant, string> = {
-  primary: "bg-primary text-white hover:bg-blue-700 border-primary",
-  secondary: "bg-white text-app-text hover:bg-slate-50 border-app-border",
+  primary: "bg-primary text-white hover:bg-[#0f5f59] border-primary shadow-[0_10px_24px_rgba(15,118,110,0.18)]",
+  secondary: "bg-white/[0.86] text-app-text hover:bg-white border-app-border",
   ghost: "border-transparent bg-transparent text-app-secondary hover:bg-slate-100",
   danger: "bg-red-600 text-white hover:bg-red-700 border-red-600",
 };

@@ -26,6 +26,7 @@ export async function listDueLearningItems(): Promise<LearningItem[]> {
     .select("*")
     .eq("is_active", true)
     .lte("next_review_at", now)
+    .order("lapses", { ascending: false })
     .order("next_review_at", { ascending: true });
 
   if (error) throw new Error(error.message);

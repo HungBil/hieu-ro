@@ -2,8 +2,11 @@ import { supabase } from "../lib/supabase";
 import type { AnalyzeWritingInput, AnalyzeWritingResponse } from "../types/ai";
 import type { CoachSession, FeedbackRating, SavedPhrase } from "../types/app";
 
-function unwrapFunctionResponse<T>(data: T | null, error: unknown): T {
+async function unwrapFunctionResponse<T>(data: T | null, error: unknown): Promise<T> {
   if (error) {
+    const context = (error as { context?: { json?: () => Promise<{ error?: string }> } })?.context;
+    const body = context?.json ? await context.json().catch(() => null) : null;
+    if (body?.error) throw new Error(body.error);
     const message = error instanceof Error ? error.message : "Không thể xử lý lúc này.";
     throw new Error(message);
   }

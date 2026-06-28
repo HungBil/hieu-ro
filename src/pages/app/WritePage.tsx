@@ -25,8 +25,8 @@ export function WritePage() {
     onSuccess: (data) => {
       navigate(`/app/write/${data.session_id}`);
     },
-    onError: () => {
-      setFormError("Hiểu Rõ chưa xử lý được câu này. Bạn có thể thử lại hoặc thêm bối cảnh.");
+    onError: (error) => {
+      setFormError(error instanceof Error ? error.message : "Hiểu Rõ chưa xử lý được câu này. Bạn có thể thử lại hoặc thêm bối cảnh.");
     },
   });
 
@@ -42,7 +42,7 @@ export function WritePage() {
 
   return (
     <div>
-      <PageHeader title="Viết rõ hơn, dễ hiểu hơn" description="Hiểu Rõ giúp bạn diễn đạt ý rõ ràng, đúng ngữ cảnh và dễ hiểu hơn." />
+      <PageHeader title="Dịch sang tiếng Việt phổ thông" description="Nhập câu khó hiểu, thiếu trật tự từ hoặc còn lẫn ý. Hiểu Rõ sẽ đưa bản hiểu tốt nhất và bài học phù hợp." />
       <RewriteComposer
         inputText={inputText}
         contextType={contextType}
@@ -55,24 +55,12 @@ export function WritePage() {
         onSubmit={submit}
       />
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        <button type="button" onClick={() => { setContextType("personal_message"); setTone("polite"); }} className="h-9 rounded-full border border-app-border bg-white px-4 text-sm text-app-secondary transition hover:bg-primary-soft hover:text-primary">
-          Tin nhắn lịch sự
-        </button>
-        <button type="button" onClick={() => setTone("formal")} className="h-9 rounded-full border border-app-border bg-white px-4 text-sm text-app-secondary transition hover:bg-primary-soft hover:text-primary">
-          Giải thích rõ hơn
-        </button>
-        <button type="button" onClick={() => setContextType("school")} className="h-9 rounded-full border border-app-border bg-white px-4 text-sm text-app-secondary transition hover:bg-primary-soft hover:text-primary">
-          Tạo bài học từ câu này
-        </button>
-      </div>
-
       <section className="mt-10">
         <h2 className="text-base font-semibold text-app-text">Gần đây</h2>
         <div className="mt-4">
           {recentQuery.isLoading ? <LoadingState label="Đang tải nội dung gần đây..." /> : null}
           {recentQuery.isError ? <ErrorState description="Không tải được nội dung gần đây." /> : null}
-          {recentQuery.data && recentQuery.data.length === 0 ? <EmptyState title="Chưa có nội dung gần đây." description="Hãy thử viết lại câu đầu tiên của bạn." /> : null}
+          {recentQuery.data && recentQuery.data.length === 0 ? <EmptyState title="Chưa có bản dịch gần đây." description="Hãy thử dịch câu đầu tiên của bạn." /> : null}
           {recentQuery.data && recentQuery.data.length > 0 ? (
             <div className="space-y-3">
               {recentQuery.data.map((session) => (

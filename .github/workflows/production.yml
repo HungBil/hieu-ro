@@ -31,6 +31,7 @@ jobs:
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      EVAL_RUNNER_TOKEN: ${{ secrets.EVAL_AUTH_TOKEN }}
       OPENAI_FAST_MODEL: ${{ vars.OPENAI_FAST_MODEL || 'gpt-5.4-mini' }}
       OPENAI_STRONG_MODEL: ${{ vars.OPENAI_STRONG_MODEL || 'gpt-5.5' }}
       OPENAI_EMBEDDING_MODEL: ${{ vars.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small' }}
@@ -45,6 +46,7 @@ jobs:
           test -n "$SUPABASE_DB_PASSWORD"
           test -n "$SUPABASE_PROJECT_REF"
           test -n "$OPENAI_API_KEY"
+          test -n "$EVAL_RUNNER_TOKEN"
       - run: supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
       - run: supabase db push --yes
       - name: Set Edge Function secrets
@@ -54,6 +56,7 @@ jobs:
             OPENAI_FAST_MODEL="$OPENAI_FAST_MODEL" \
             OPENAI_STRONG_MODEL="$OPENAI_STRONG_MODEL" \
             OPENAI_EMBEDDING_MODEL="$OPENAI_EMBEDDING_MODEL" \
+            EVAL_RUNNER_TOKEN="$EVAL_RUNNER_TOKEN" \
             RAG_ENABLED=true \
             RERANK_ENABLED=false \
             AI_DEFAULT_MODE=balanced \

@@ -3,11 +3,12 @@ import { ProtectedRoute } from "./auth/ProtectedRoute";
 import { RoleGuard } from "./auth/RoleGuard";
 import { AppLayout } from "./layouts/AppLayout";
 import { AuthLayout } from "./layouts/AuthLayout";
-import { RootRedirect } from "./pages/RootRedirect";
+import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/auth/LoginPage";
 import { RegisterPage } from "./pages/auth/RegisterPage";
 import { ForgotPasswordPage } from "./pages/auth/ForgotPasswordPage";
 import { AuthCallbackPage } from "./pages/auth/AuthCallbackPage";
+import { UpdatePasswordPage } from "./pages/auth/UpdatePasswordPage";
 import { WritePage } from "./pages/app/WritePage";
 import { WriteResultPage } from "./pages/app/WriteResultPage";
 import { LessonsPage } from "./pages/app/LessonsPage";
@@ -23,12 +24,13 @@ import { EmptyState } from "./components/common/EmptyState";
 export function App() {
   return (
     <Routes>
-      <Route path="/" element={<RootRedirect />} />
+      <Route path="/" element={<HomePage />} />
       <Route path="/auth" element={<AuthLayout />}>
         <Route path="login" element={<LoginPage />} />
         <Route path="register" element={<RegisterPage />} />
         <Route path="forgot-password" element={<ForgotPasswordPage />} />
         <Route path="callback" element={<AuthCallbackPage />} />
+        <Route path="update-password" element={<UpdatePasswordPage />} />
       </Route>
       <Route
         path="/app"

@@ -72,6 +72,17 @@ VITE_SUPABASE_URL=https://ktyshhoihpiyijswemjl.supabase.co
 CLOUDFLARE_PAGES_PROJECT=hieu-ro
 ```
 
+Supabase Auth URL Configuration:
+
+```txt
+Email provider: Confirm email = enabled
+Site URL: https://hieu-ro.pages.dev
+Redirect URLs:
+https://hieu-ro.pages.dev/auth/callback
+http://localhost:3000/auth/callback
+http://localhost:5173/auth/callback
+```
+
 Required Edge Function secrets:
 
 ```txt
@@ -79,6 +90,7 @@ OPENAI_API_KEY
 OPENAI_FAST_MODEL=gpt-5.4-mini
 OPENAI_STRONG_MODEL=gpt-5.5
 OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+EVAL_RUNNER_TOKEN
 RAG_ENABLED=true
 RERANK_ENABLED=false
 AI_DEFAULT_MODE=balanced
@@ -113,5 +125,7 @@ CLOUDFLARE_PAGES_PROJECT=hieu-ro
 ```
 
 Deploy order on `main`: verify -> Supabase migrations/functions/secrets -> live eval -> Cloudflare Pages.
+
+`EVAL_AUTH_TOKEN` is the GitHub-side copy of the Supabase Edge Function `EVAL_RUNNER_TOKEN`. It is only used by CI to run `run-eval-suite`; human reviewer/admin JWTs still work through normal Supabase Auth.
 
 Security note: rotate any OpenAI key that was pasted into chat or logs before setting it as a production secret. Do not commit keys or pass them as plain command arguments.

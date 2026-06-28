@@ -9,7 +9,6 @@ import {
   detectSensitiveInfo,
   estimateAmbiguityScore,
   estimateCost,
-  fallbackRewriteResult,
   hashText,
   logTrace,
   rewriteResultJsonSchema,
@@ -20,7 +19,11 @@ import {
 } from "../_shared/harness.ts";
 
 const PROMPT_NAME = "rewrite_coach";
-const PROMPT_VERSION = "v1";
+const PROMPT_VERSION = "v2";
+
+function isConfigurationError(message: string | null) {
+  return Boolean(message?.startsWith("Missing "));
+}
 
 async function enforceDailyLimit(service: any, userId: string) {
   const { data: profile } = await service.from("profiles").select("role").eq("id", userId).maybeSingle();
@@ -53,10 +56,6 @@ async function maybeRetrieve(service: any, input: {
 
   const { count } = await service.from("kb_chunks").select("id", { count: "exact", head: true }).not("embedding", "is", null);
   if (!count) return { chunks: [], ids: [], reason: "kb_empty" };
-
-  if (input.ambiguityScore < 0.35 && input.query.length < 120) {
-    return { chunks: [], ids: [], reason: "not_needed" };
-  }
 
   const embedding = await embedText(input.query);
   const { data, error } = await service.rpc("match_kb_chunks", {
@@ -269,11 +268,11 @@ serve(async (req) => {
       }
     }
 
-    if (!result) {
-      result = fallbackRewriteResult(parsed.inputText);
-      success = false;
-      errorMessage = finalIssues.join("; ") || "Output validation failed";
+    if (!result && isConfigurationError(errorMessage)) {
+      throw new Error("AI_CONFIG_MISSING");
     }
+
+    if (!result) throw new Error("AI_OUTPUT_FAILED");
 
     const latencyMs = Date.now() - functionStarted;
     const inputTokens = usage?.prompt_tokens ?? null;
@@ -356,6 +355,7 @@ serve(async (req) => {
     if (isAuth) return friendlyError(401, "Bạn cần đăng nhập để dùng tính năng này.");
     if (isLimit) return friendlyError(429, "Bạn đã dùng hết lượt hôm nay. Hãy quay lại vào ngày mai.");
     if (isLength) return friendlyError(400, "Nội dung chưa phù hợp. Vui lòng nhập từ 2 đến 3000 ký tự.");
+    if (message === "AI_CONFIG_MISSING") return friendlyError(500, "AI chưa được cấu hình trên production. Vui lòng báo quản trị viên kiểm tra OPENAI_API_KEY.");
     return friendlyError(500, "Hiểu Rõ chưa xử lý được câu này. Bạn có thể thử lại hoặc thêm bối cảnh để hệ thống hiểu rõ hơn.");
   }
 });

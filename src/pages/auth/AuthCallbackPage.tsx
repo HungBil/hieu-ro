@@ -9,8 +9,11 @@ export function AuthCallbackPage() {
   useEffect(() => {
     let cancelled = false;
     async function finish() {
+      const params = new URLSearchParams(window.location.search);
+      const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+      const isRecovery = params.get("type") === "recovery" || hash.get("type") === "recovery";
       await supabase.auth.getSession();
-      if (!cancelled) navigate("/app/write", { replace: true });
+      if (!cancelled) navigate(isRecovery ? "/auth/update-password" : "/app/write", { replace: true });
     }
     finish();
     return () => {

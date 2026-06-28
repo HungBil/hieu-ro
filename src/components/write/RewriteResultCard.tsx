@@ -18,7 +18,8 @@ export function RewriteResultCard({
 }) {
   return (
     <section className="rounded-card border border-primary/20 bg-white p-6 shadow-subtle md:p-8">
-      <p className="text-sm font-medium text-primary">Câu viết lại rõ hơn</p>
+      <p className="text-sm font-medium text-primary">Bản dịch tiếng Việt phổ thông</p>
+      {result.meaning_guess ? <p className="mt-2 text-sm leading-6 text-app-secondary">{result.meaning_guess}</p> : null}
       <p className="mt-4 whitespace-pre-wrap text-xl leading-9 text-app-text">{result.rewritten_text}</p>
       <div className="mt-6 flex flex-col gap-3 sm:flex-row">
         <Button type="button" variant="secondary" onClick={onCopy}>

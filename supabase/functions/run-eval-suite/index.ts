@@ -2,9 +2,9 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { corsHeaders, friendlyError, jsonResponse } from "../_shared/cors.ts";
 import { callOpenAIChat } from "../_shared/openai.ts";
 import { createServiceClient, isReviewerOrAdmin, requireUser } from "../_shared/supabaseClient.ts";
-import { buildRewriteMessages, rewriteResultJsonSchema, safeParseJson, validateRewriteResult } from "../_shared/harness.ts";
+import { buildRewriteMessages, criticRewriteResult, rewriteResultJsonSchema, safeParseJson, validateRewriteResult } from "../_shared/harness.ts";
 
-const PROMPT_VERSION = "rewrite_coach_v1";
+const PROMPT_VERSION = "rewrite_coach_v2";
 
 function normalizeForEval(value: string) {
   return value.toLowerCase().normalize("NFC").replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
@@ -12,22 +12,51 @@ function normalizeForEval(value: string) {
 
 function expectedTerms(value: unknown) {
   if (!Array.isArray(value)) return [];
-  return value
-    .map((item) => {
-      if (typeof item === "string") return item;
-      if (typeof item?.contains === "string") return item.contains;
-      if (typeof item?.phrase === "string") return item.phrase;
-      if (typeof item?.term === "string") return item.term;
-      return "";
-    })
-    .map((item) => normalizeForEval(item))
-    .filter(Boolean);
+  return value;
 }
 
-function includesTerms(haystack: string, terms: string[]) {
-  if (!terms.length) return true;
+function includesTermGroup(haystack: string, item: unknown) {
   const normalized = normalizeForEval(haystack);
-  return terms.every((term) => normalized.includes(term));
+  if (typeof item === "string") return normalized.includes(normalizeForEval(item));
+  if (!item || typeof item !== "object") return true;
+  const group = item as { contains?: unknown; phrase?: unknown; term?: unknown; any?: unknown };
+  if (typeof group.contains === "string") return normalized.includes(normalizeForEval(group.contains));
+  if (typeof group.phrase === "string") return normalized.includes(normalizeForEval(group.phrase));
+  if (typeof group.term === "string") return normalized.includes(normalizeForEval(group.term));
+  if (Array.isArray(group.any)) return group.any.some((term) => typeof term === "string" && normalized.includes(normalizeForEval(term)));
+  return true;
+}
+
+function includesTerms(haystack: string, terms: unknown[]) {
+  if (!terms.length) return true;
+  return terms.every((term) => includesTermGroup(haystack, term));
+}
+
+function isCoreEval(category: string | null) {
+  return Boolean(category?.startsWith("deaf_translation") || category?.startsWith("learning_point") || category?.startsWith("adaptive_learning"));
+}
+
+function safeTokenEqual(a: string, b: string) {
+  const left = new TextEncoder().encode(a);
+  const right = new TextEncoder().encode(b);
+  let diff = left.length ^ right.length;
+  const length = Math.max(left.length, right.length);
+  for (let index = 0; index < length; index += 1) {
+    diff |= (left[index] ?? 0) ^ (right[index] ?? 0);
+  }
+  return diff === 0;
+}
+
+async function requireEvalRunner(req: Request, service: ReturnType<typeof createServiceClient>) {
+  const authHeader = req.headers.get("Authorization") || req.headers.get("authorization");
+  const token = authHeader?.startsWith("Bearer ") ? authHeader.replace("Bearer ", "").trim() : "";
+  const runnerToken = Deno.env.get("EVAL_RUNNER_TOKEN");
+  if (runnerToken && token && safeTokenEqual(token, runnerToken)) return null;
+
+  const user = await requireUser(req);
+  const allowed = await isReviewerOrAdmin(service, user.id);
+  if (!allowed) throw new Error("EVAL_FORBIDDEN");
+  return user.id;
 }
 
 function tokenOverlap(actual: string, expected: string | null) {
@@ -43,18 +72,25 @@ function tokenOverlap(actual: string, expected: string | null) {
   return matched / expectedTokens.length;
 }
 
+function classifyError(message: string) {
+  if (message.startsWith("Missing OPENAI_API_KEY")) return "missing_openai_api_key";
+  if (/quota|billing|insufficient/i.test(message)) return "openai_quota_or_billing";
+  if (/api key|authentication|unauthorized/i.test(message)) return "openai_auth";
+  if (/schema|response_format|json_schema/i.test(message)) return "openai_schema";
+  if (/model/i.test(message)) return "openai_model";
+  return "internal";
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return friendlyError(405, "Phương thức không được hỗ trợ.");
 
   const service = createServiceClient();
+  let runBy: string | null = null;
+  let model = Deno.env.get("OPENAI_FAST_MODEL") || "gpt-5.4-mini";
 
   try {
-    const user = await requireUser(req);
-    const allowed = await isReviewerOrAdmin(service, user.id);
-    if (!allowed) return friendlyError(403, "Bạn không có quyền chạy eval.");
-
-    const model = Deno.env.get("OPENAI_FAST_MODEL") || "gpt-5.4-mini";
+    runBy = await requireEvalRunner(req, service);
     const { data: cases, error } = await service
       .from("ai_eval_cases")
       .select("*")
@@ -68,6 +104,9 @@ serve(async (req) => {
     const details = [];
     let passed = 0;
     let totalScore = 0;
+    let corePassed = 0;
+    let coreCases = 0;
+    let coreScore = 0;
 
     for (const evalCase of cases) {
       const completion = await callOpenAIChat({
@@ -82,6 +121,7 @@ serve(async (req) => {
       });
 
       const parsed = validateRewriteResult(safeParseJson(completion.content));
+      const critic = parsed.result ? criticRewriteResult(evalCase.input_text, parsed.result) : { pass: false, issues: ["missing result"] };
       const hasRewrite = Boolean(parsed.result?.rewritten_text);
       const respectful = !JSON.stringify(parsed.result || {}).toLowerCase().includes(`bạn ${"viết"} ${"sai"}`);
       const noEnglishLesson = !JSON.stringify(parsed.result?.learning_points || {}).toLowerCase().match(/\benglish|vocabulary|pronunciation\b/);
@@ -91,51 +131,79 @@ serve(async (req) => {
       const expectedLearningMet = includesTerms(lessonText, expectedTerms(evalCase.expected_learning_points));
       const expectedRewriteAligned = tokenOverlap(parsed.result?.rewritten_text || "", evalCase.expected_rewrite) >= 0.35;
       const criteria = [
-        hasRewrite && parsed.issues.length === 0,
+        hasRewrite && parsed.issues.length === 0 && critic.pass,
         respectful && noEnglishLesson,
         expectedRewriteAligned,
         expectedAmbiguitiesMet,
         expectedLearningMet,
       ];
-      const overall = Math.max(1, criteria.filter(Boolean).length);
+      const overall = expectedRewriteAligned ? Math.max(1, criteria.filter(Boolean).length) : 0;
       if (overall >= 4) passed += 1;
       totalScore += overall;
+      const core = isCoreEval(evalCase.category);
+      if (core) {
+        coreCases += 1;
+        coreScore += overall;
+        if (overall >= 4) corePassed += 1;
+      }
       details.push({
         case_id: evalCase.id,
         name: evalCase.name,
+        category: evalCase.category,
+        core,
         overall,
+        rewritten_text: parsed.result?.rewritten_text || "",
+        ambiguities: parsed.result?.ambiguities || [],
+        learning_points: parsed.result?.learning_points || [],
         checks: {
           hasRewrite,
           respectful,
           noEnglishLesson,
+          criticPass: critic.pass,
           expectedRewriteAligned,
           expectedAmbiguitiesMet,
           expectedLearningMet,
         },
-        issues: parsed.issues,
+        issues: [...parsed.issues, ...critic.issues],
       });
     }
 
-    const average = Number((totalScore / cases.length).toFixed(2));
+    if (!coreCases) return friendlyError(409, "Chưa có eval core cho tính năng dịch câu người điếc.");
+
+    const average = Number((coreScore / coreCases).toFixed(2));
+    const allAverage = Number((totalScore / cases.length).toFixed(2));
+    const corePassRate = Number((corePassed / coreCases).toFixed(3));
     const { data: run, error: runError } = await service
       .from("ai_eval_runs")
       .insert({
-        run_by: user.id,
+        run_by: runBy,
         prompt_version: PROMPT_VERSION,
         model,
         total_cases: cases.length,
-        passed_cases: passed,
+        passed_cases: corePassed,
         average_score: average,
-        details,
+        details: { core: { total_cases: coreCases, passed_cases: corePassed, average_score: average, pass_rate: corePassRate }, all: { total_cases: cases.length, passed_cases: passed, average_score: allAverage }, cases: details },
       })
       .select("id")
       .single();
 
     if (runError) throw runError;
-    return jsonResponse({ run_id: run.id, total_cases: cases.length, passed_cases: passed, average_score: average, details });
+    return jsonResponse({ run_id: run.id, total_cases: coreCases, passed_cases: corePassed, average_score: average, pass_rate: corePassRate, details });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown";
     if (message === "AUTH_REQUIRED") return friendlyError(401, "Bạn cần đăng nhập.");
-    return friendlyError(500, "Không thể chạy eval lúc này.");
+    if (message === "EVAL_FORBIDDEN") return friendlyError(403, "Bạn không có quyền chạy eval.");
+    const debugCode = classifyError(message);
+    console.error("run-eval-suite failed", { message });
+    await service.from("ai_eval_runs").insert({
+      run_by: runBy,
+      prompt_version: PROMPT_VERSION,
+      model,
+      total_cases: 0,
+      passed_cases: 0,
+      average_score: 0,
+      details: [{ error_code: debugCode }],
+    });
+    return jsonResponse({ error: "Không thể chạy eval lúc này.", debug_code: debugCode }, 500);
   }
 });

@@ -27,13 +27,13 @@ export function RewriteComposer({
   return (
     <section className="rounded-composer border border-app-border bg-white p-5 shadow-subtle md:p-6">
       <label className="sr-only" htmlFor="rewrite-input">
-        Câu hoặc đoạn văn cần viết lại
+        Câu cần dịch sang tiếng Việt phổ thông
       </label>
       <textarea
         id="rewrite-input"
         value={inputText}
         onChange={(event) => onInputChange(event.target.value)}
-        placeholder="Dán câu hoặc đoạn văn cần viết lại..."
+        placeholder="Ví dụ: Ở pháp người cap trộm tiền trung anh điếc may tiền bảo vệ"
         className="min-h-[180px] w-full resize-y rounded-[18px] border border-transparent bg-slate-50 p-5 text-base leading-7 text-app-text placeholder:text-app-muted focus:border-primary focus:bg-white focus:outline-none"
         maxLength={3000}
       />
@@ -54,7 +54,7 @@ export function RewriteComposer({
             </select>
           </label>
           <label className="flex items-center gap-2 text-sm text-app-secondary">
-            <span>Giọng điệu</span>
+            <span>Cách diễn đạt</span>
             <select
               value={tone}
               onChange={(event) => onToneChange(event.target.value as ToneType)}
@@ -69,7 +69,7 @@ export function RewriteComposer({
           </label>
         </div>
         <Button onClick={onSubmit} disabled={submitting} className="w-full md:w-auto">
-          {submitting ? "Đang viết lại..." : "Viết lại rõ hơn"}
+          {submitting ? "Đang dịch..." : "Dịch câu"}
         </Button>
       </div>
       {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}

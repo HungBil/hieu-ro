@@ -265,6 +265,9 @@ export function criticRewriteResult(inputText: string, result: RewriteResult) {
   const bannedSignals = [`bạn ${"viết"} ${"sai"}`, `không ${"biết"} tiếng việt`, `${"dịch"} tiếng việt người điếc`];
   for (const signal of bannedSignals) if (joined.includes(signal)) issues.push("Output có wording phán xét.");
   if (result.rewritten_text.length > Math.max(500, inputText.length * 3)) issues.push("Câu viết lại dài quá mức cần thiết.");
+  if (/mình chưa đủ chắc|cần thêm bối cảnh|không thể viết lại/i.test(result.rewritten_text)) {
+    issues.push("Output từ chối thay vì đưa bản hiểu tốt nhất.");
+  }
   if (!inputText.match(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/) && result.rewritten_text.match(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/)) issues.push("Output thêm email không có trong input.");
   if (!/(\+?84|0)(\d[\s.-]?){8,10}/.test(inputText) && /(\+?84|0)(\d[\s.-]?){8,10}/.test(result.rewritten_text)) issues.push("Output thêm số điện thoại không có trong input.");
   const lessonText = result.learning_points.map((point) => `${point.title} ${point.rule_text}`).join(" ").toLowerCase();
@@ -272,7 +275,7 @@ export function criticRewriteResult(inputText: string, result: RewriteResult) {
 
   const riskyAccusations = ["trộm", "lừa đảo", "đe dọa", "tấn công", "ăn cắp"];
   if (riskyAccusations.some((word) => inputText.toLowerCase().includes(word))) {
-    if (!/(có thể|nghi ngờ|cần xác minh|nên kiểm tra)/i.test(result.rewritten_text)) {
+    if (!/(có thể|mình hiểu tạm|nghi ngờ|cần xác minh|nên kiểm tra|chưa xác định|chưa rõ)/i.test(result.rewritten_text)) {
       issues.push("Câu nhạy cảm cần diễn đạt thận trọng hơn.");
     }
   }
@@ -301,12 +304,13 @@ export function buildRewriteMessages(input: {
     ? `\nLần trả lời trước chưa đạt vì: ${input.retryIssues.join("; ")}. Hãy sửa và vẫn trả JSON hợp lệ.`
     : "";
 
-  const system = `Bạn là công cụ hỗ trợ viết tiếng Việt phổ thông rõ ràng, tôn trọng và dễ hiểu.
-Nhiệm vụ: viết lại câu gốc thành cách diễn đạt rõ hơn, giữ đúng ý có trong input.
-Không tự thêm người, sự kiện, cáo buộc, địa điểm hoặc kết luận không có căn cứ.
-Nếu câu mơ hồ, hãy nêu chỗ chưa chắc và đặt câu hỏi làm rõ.
-Giải thích ngắn gọn vì sao sửa như vậy.
-Tạo 1-3 bài học nhỏ về cách viết tiếng Việt rõ hơn.
+  const system = `Bạn là công cụ dịch câu tiếng Việt khó hiểu, thiếu trật tự từ hoặc chịu ảnh hưởng ngôn ngữ ký hiệu sang tiếng Việt phổ thông.
+Nhiệm vụ chính: luôn đưa bản hiểu tốt nhất có thể trong rewritten_text, kể cả khi câu mơ hồ.
+Nếu chưa chắc, hãy viết bản dịch thận trọng bằng "Có thể là..." hoặc "Mình hiểu tạm là...", giảm confidence_score, ghi ambiguity_level phù hợp, nêu chỗ chưa chắc và đặt câu hỏi xác nhận.
+Không được chỉ trả lời rằng cần thêm bối cảnh nếu vẫn có thể đoán được ý chính.
+Không tự thêm người, sự kiện, cáo buộc, địa điểm hoặc kết luận không có căn cứ. Với nội dung trộm cắp, tiền, tai nạn hoặc bảo vệ, dùng wording thận trọng như "có thể", "nghi", "cần xác nhận" khi input chưa rõ.
+Giải thích ngắn gọn vì sao dịch/sửa như vậy.
+Tạo 1-3 bài học nhỏ giúp người học tiến gần tiếng Việt phổ thông hơn, ưu tiên trật tự từ, quan hệ sở hữu, từ gần đúng, thiếu chủ ngữ/vị ngữ và cách nối ý.
 Không tạo nội dung học tiếng Anh, không dịch sang tiếng Anh, không dùng giọng thương hại, không dùng wording phán xét.
 Không hiển thị suy luận nội bộ.
 Trả về JSON hợp lệ, không markdown, không text ngoài JSON.`;
@@ -341,21 +345,21 @@ Trả về JSON hợp lệ, không markdown, không text ngoài JSON.`;
 
 export function fallbackRewriteResult(inputText: string): RewriteResult {
   return {
-    rewritten_text: "Mình chưa đủ chắc để viết lại câu này sát ý. Bạn có thể thêm bối cảnh: ai đang nói, nói với ai, và chuyện xảy ra ở đâu không?",
-    meaning_guess: "Câu hiện tại cần thêm bối cảnh để tránh hiểu sai ý.",
+    rewritten_text: `Có thể là: ${inputText.trim()}`,
+    meaning_guess: "Hệ thống chưa tạo được bản dịch chắc chắn, nên đang giữ nguyên ý gốc và đánh dấu cần xác nhận.",
     confidence_score: 0.2,
     ambiguity_level: "high",
     ambiguities: [
-      { phrase: inputText.slice(0, 120), why_unclear: "Thiếu bối cảnh để xác định ý chính.", question: "Ai đang nói với ai, và mục đích của câu này là gì?" },
+      { phrase: inputText.slice(0, 120), why_unclear: "Chưa đủ chắc để xác định trật tự câu, người liên quan hoặc quan hệ sở hữu.", question: "Bạn muốn nói ai làm gì với ai, và chuyện xảy ra ở đâu?" },
     ],
-    rewrite_reasons: ["Câu còn thiếu bối cảnh nên cần hỏi lại trước khi viết chắc chắn."],
+    rewrite_reasons: ["Giữ bản hiểu thận trọng để tránh thêm ý không có trong câu gốc."],
     learning_points: [
       {
         type: "clarity",
-        title: "Thêm bối cảnh chính",
-        rule_text: "Khi câu có thể hiểu nhiều cách, hãy thêm người nói, người nhận và mục đích của câu.",
+        title: "Thêm vai người và ý chính",
+        rule_text: "Khi câu có nhiều mảnh ý, hãy viết rõ ai làm gì, với ai, ở đâu hoặc vì sao.",
         unclear_example: inputText.slice(0, 300),
-        clear_example: "Mình muốn nói với [người nhận] rằng [ý chính] trong bối cảnh [thời gian/địa điểm].",
+        clear_example: "Ở [địa điểm], [ai] đã [hành động] với [ai/cái gì], nên [kết quả].",
       },
     ],
     safety_notes: [],

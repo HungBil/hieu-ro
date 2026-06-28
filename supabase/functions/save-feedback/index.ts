@@ -4,6 +4,7 @@ import { createServiceClient, requireUser } from "../_shared/supabaseClient.ts";
 import { logTrace } from "../_shared/harness.ts";
 
 const allowedRatings = new Set(["correct", "wrong_meaning", "missing_meaning", "too_verbose", "too_hard", "hallucinated", "other"]);
+const learningSignalRatings = new Set(["wrong_meaning", "missing_meaning", "hallucinated"]);
 
 function qualityForRating(rating: string) {
   if (rating === "correct") return "good";
@@ -30,7 +31,7 @@ serve(async (req) => {
 
     const { data: session, error: sessionError } = await service
       .from("coach_sessions")
-      .select("id,user_id")
+      .select("id,user_id,input_text")
       .eq("id", sessionId)
       .single();
 
@@ -54,6 +55,24 @@ serve(async (req) => {
       .from("coach_sessions")
       .update({ quality_status: qualityForRating(rating), feedback_summary: comment || rating })
       .eq("id", sessionId);
+
+    if (correctedText && learningSignalRatings.has(rating)) {
+      await service.from("learning_items").insert({
+        user_id: user.id,
+        source_session_id: sessionId,
+        item_type: "clarity",
+        title: "Sửa nghĩa theo góp ý",
+        rule_text: "Khi bản dịch chưa đúng ý, so sánh câu gốc với câu đã sửa để nhớ cách diễn đạt tiếng Việt phổ thông sát nghĩa hơn.",
+        unclear_example: session.input_text?.slice(0, 500) || null,
+        clear_example: correctedText,
+        next_review_at: new Date().toISOString(),
+        interval_days: 1,
+        ease_factor: 2.2,
+        repetitions: 0,
+        lapses: 1,
+        is_active: true,
+      });
+    }
 
     await logTrace(service, {
       user_id: user.id,
