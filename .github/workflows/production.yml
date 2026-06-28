@@ -1,0 +1,115 @@
+name: production
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm run verify
+
+  deploy-supabase:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    needs: verify
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_FAST_MODEL: ${{ vars.OPENAI_FAST_MODEL || 'gpt-5.4-mini' }}
+      OPENAI_STRONG_MODEL: ${{ vars.OPENAI_STRONG_MODEL || 'gpt-5.5' }}
+      OPENAI_EMBEDDING_MODEL: ${{ vars.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v2
+        with:
+          version: latest
+      - name: Require production secrets
+        run: |
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          test -n "$SUPABASE_DB_PASSWORD"
+          test -n "$SUPABASE_PROJECT_REF"
+          test -n "$OPENAI_API_KEY"
+      - run: supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+      - run: supabase db push --yes
+      - name: Set Edge Function secrets
+        run: |
+          supabase secrets set \
+            OPENAI_API_KEY="$OPENAI_API_KEY" \
+            OPENAI_FAST_MODEL="$OPENAI_FAST_MODEL" \
+            OPENAI_STRONG_MODEL="$OPENAI_STRONG_MODEL" \
+            OPENAI_EMBEDDING_MODEL="$OPENAI_EMBEDDING_MODEL" \
+            RAG_ENABLED=true \
+            RERANK_ENABLED=false \
+            AI_DEFAULT_MODE=balanced \
+            LOG_LEVEL=info \
+            DAILY_REWRITE_LIMIT=30 \
+            --project-ref "$SUPABASE_PROJECT_REF"
+      - name: Deploy Edge Functions
+        run: |
+          supabase functions deploy analyze-writing --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt
+          supabase functions deploy generate-lesson --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt
+          supabase functions deploy save-feedback --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt
+          supabase functions deploy ingest-approved-samples --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt
+          supabase functions deploy run-eval-suite --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt
+
+  live-eval:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    needs: deploy-supabase
+    env:
+      EVAL_FUNCTION_URL: https://${{ vars.SUPABASE_PROJECT_REF }}.supabase.co/functions/v1/run-eval-suite
+      EVAL_AUTH_TOKEN: ${{ secrets.EVAL_AUTH_TOKEN }}
+      EVAL_MIN_AVERAGE: ${{ vars.EVAL_MIN_AVERAGE || '4' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm run eval:live
+
+  deploy-cloudflare:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    needs: live-eval
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT || 'hieu-ro' }}
+      VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+      VITE_APP_ENV: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Require Cloudflare and frontend env
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$VITE_SUPABASE_URL"
+          test -n "$VITE_SUPABASE_ANON_KEY"
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - run: npx wrangler@4.100.0 pages deploy dist --project-name "$CLOUDFLARE_PAGES_PROJECT" --branch main

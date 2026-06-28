@@ -1,0 +1,25 @@
+project_id = "hieu-ro"
+
+[api]
+enabled = true
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+major_version = 15
+
+[functions.analyze-writing]
+verify_jwt = false
+
+[functions.generate-lesson]
+verify_jwt = false
+
+[functions.save-feedback]
+verify_jwt = false
+
+[functions.ingest-approved-samples]
+verify_jwt = false
+
+[functions.run-eval-suite]
+verify_jwt = false
