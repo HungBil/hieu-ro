@@ -3,12 +3,6 @@ import { corsHeaders, friendlyError, jsonResponse } from "../_shared/cors.ts";
 import { createServiceClient, requireUser } from "../_shared/supabaseClient.ts";
 import { allowedLearningTypes, logTrace } from "../_shared/harness.ts";
 
-function addDays(days: number) {
-  const date = new Date();
-  date.setDate(date.getDate() + days);
-  return date.toISOString();
-}
-
 function sanitizeLearningPoint(point: any, fallbackInput: string) {
   return {
     item_type: allowedLearningTypes.has(String(point?.type)) ? String(point.type) : "clarity",
@@ -73,7 +67,7 @@ serve(async (req) => {
       user_id: user.id,
       source_session_id: sessionId,
       ...point,
-      next_review_at: addDays(1),
+      next_review_at: new Date().toISOString(),
       interval_days: 1,
       ease_factor: 2.5,
       repetitions: 0,
