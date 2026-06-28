@@ -22,6 +22,22 @@ if (body.average_score < Number(process.env.EVAL_MIN_AVERAGE || "4")) {
   throw new Error(`Eval average ${body.average_score} is below threshold`);
 }
 if (body.passed_cases < body.total_cases) {
+  const failedCoreCases = Array.isArray(body.details)
+    ? body.details.filter((item) => item?.core && Number(item?.overall || 0) < 4)
+    : [];
+  if (failedCoreCases.length) {
+    console.error("Failed core eval cases:");
+    for (const item of failedCoreCases) {
+      const checks = item.checks && typeof item.checks === "object" ? item.checks : {};
+      const failedChecks = Object.entries(checks)
+        .filter(([, passed]) => !passed)
+        .map(([name]) => name)
+        .join(", ");
+      console.error(`- ${item.name || "unnamed"}: score=${item.overall ?? "n/a"} failed=${failedChecks || "unknown"}`);
+      if (item.rewritten_text) console.error(`  rewrite=${String(item.rewritten_text).slice(0, 240)}`);
+      if (Array.isArray(item.issues) && item.issues.length) console.error(`  issues=${item.issues.join("; ")}`);
+    }
+  }
   throw new Error(`Eval passed ${body.passed_cases}/${body.total_cases}; all core cases must pass`);
 }
 
